@@ -109,6 +109,7 @@ defmodule SocialScribe.BotsTest do
 
         {:ok,
          %{
+           status: 200,
            body: %{
              id: "recall_bot_123",
              video_url: nil,
@@ -151,6 +152,7 @@ defmodule SocialScribe.BotsTest do
 
         {:ok,
          %{
+           status: 200,
            body: %{
              id: "recall_bot_123",
              video_url: nil,
