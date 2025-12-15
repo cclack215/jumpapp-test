@@ -1,0 +1,240 @@
+<div class="bg-white rounded-lg shadow-xl max-w-4xl w-full p-6 md:p-8">
+    <h2 class="text-2xl font-bold mb-2 text-gray-900">Update in HubSpot</h2>
+    <p class="text-sm text-gray-600 mb-6">
+      Here are suggested updates to sync with your integrations based on this meeting
+    </p>
+
+    <!-- Select Contact Section -->
+    <div class="mb-6">
+      <label class="block text-sm font-medium text-gray-700 mb-2">Select Contact</label>
+
+      <%= if @selected_contact do %>
+        <!-- Selected contact as input-style control; no inline spinner, loading is shown in updates section -->
+        <div class="relative" phx-click={if !@loading, do: "change_contact"} phx-target={@myself}>
+          <input
+            type="text"
+            value={format_contact_name(@selected_contact)}
+            readonly
+            class="w-full px-4 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-900 cursor-pointer"
+          />
+          <div class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-400">
+            <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+        </div>
+      <% else %>
+        <form phx-change="search_contacts" phx-target={@myself} phx-debounce="300">
+          <div class="relative">
+            <input
+              type="text"
+              name="query"
+              value={@search_query}
+              placeholder="Search for a contact..."
+              class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            />
+            <!-- Dropdown icon to make this look like a select/search control -->
+            <div class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-gray-400">
+              <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+            <%= if @loading do %>
+              <div class="absolute right-3 top-2.5">
+                <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-600"></div>
+              </div>
+            <% end %>
+          </div>
+        </form>
+        <%= if not Enum.empty?(@search_results) do %>
+          <div class="mt-2 border border-gray-200 rounded-md bg-white shadow-lg max-h-60 overflow-y-auto z-50 relative">
+            <div
+              :for={contact <- @search_results}
+              phx-click="select_contact"
+              phx-value-contact_id={contact.id}
+              phx-target={@myself}
+              class="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0"
+            >
+              <div class="flex items-center space-x-2">
+                <div class="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-semibold text-sm">
+                  <%= String.first(format_contact_name(contact)) %>
+                </div>
+                <div>
+                  <div class="font-medium text-gray-900"><%= format_contact_name(contact) %></div>
+                  <%= if contact.email do %>
+                    <div class="text-sm text-gray-500"><%= contact.email %></div>
+                  <% end %>
+                </div>
+              </div>
+            </div>
+          </div>
+        <% else %>
+          <%= if @search_query && String.length(@search_query) >= 1 && not @loading && @contacts_loaded do %>
+            <div class="mt-2 text-sm text-gray-500 p-2">
+              No contacts found for "<%= @search_query %>"
+            </div>
+          <% end %>
+          <%= if @loading && @search_query == "" do %>
+            <div class="mt-2 text-sm text-gray-500 p-2">
+              Loading contacts...
+            </div>
+          <% end %>
+        <% end %>
+      <% end %>
+    </div>
+
+    <!-- Updates Sections -->
+    <%= if @selected_contact && not Enum.empty?(@suggested_updates) do %>
+      <div class="space-y-4 max-h-96 overflow-y-auto pr-2">
+        <%= for {property, items} <- group_updates_by_property(@suggested_updates) do %>
+          <% 
+            section_indices = Enum.map(items, fn {_update, idx} -> idx end)
+            section_selected_count = count_selected_updates(@selected_updates, section_indices)
+            section_total = length(items)
+            all_selected = section_selected_count == section_total
+            property_display = get_property_display_name(property)
+          %>
+          <div class="border border-gray-200 rounded-lg p-4 bg-white">
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center space-x-3">
+                <input
+                  type="checkbox"
+                  checked={all_selected}
+                  phx-click="toggle_section"
+                  phx-value-section={property}
+                  phx-target={@myself}
+                  class="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                />
+                <h3 class="font-semibold text-gray-900"><%= property_display %></h3>
+              </div>
+              <div class="flex items-center space-x-2">
+                <span class="px-2 py-1 text-xs font-medium text-gray-600 bg-gray-100 rounded-full">
+                  <%= section_selected_count %> update<%= if section_selected_count != 1, do: "s", else: "" %> selected
+                </span>
+                <button
+                  type="button"
+                  class="text-sm text-gray-500 hover:text-gray-700"
+                >
+                  Hide details
+                </button>
+              </div>
+            </div>
+
+            <div class="space-y-3 pl-7">
+              <%= for {update, idx} <- items do %>
+                <% 
+                  is_selected = Map.get(@selected_updates, idx, false)
+                  current_value = Map.get(update, "current_value", "No existing value")
+                  suggested_value = Map.get(update, "suggested_value", "")
+                  reason = Map.get(update, "reason", "")
+                  timestamp = Map.get(update, "timestamp", "")
+                %>
+                <div class="border-t border-gray-100 pt-3 first:border-0 first:pt-0">
+                  <div class="flex items-center space-x-3 mb-2">
+                    <input
+                      type="checkbox"
+                      checked={is_selected}
+                      phx-click="toggle_update"
+                      phx-value-index={idx}
+                      phx-target={@myself}
+                      class="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                    />
+                    <span class="text-sm font-medium text-gray-700"><%= get_property_display_name(property) %>:</span>
+                  </div>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-2 w-full">
+                    <div>
+                      <input
+                        type="text"
+                        value={current_value}
+                        readonly
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-700"
+                      />
+                      <div class="mt-1">
+                        <a href="#" class="text-sm text-indigo-600 hover:text-indigo-800">
+                          Update mapping
+                        </a>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div class="flex items-center space-x-2 mb-1">
+                        <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                        </svg>
+                        <input
+                          type="text"
+                          value={suggested_value}
+                          readonly
+                          class="w-full px-3 py-2 border border-indigo-300 rounded-md bg-indigo-50 text-gray-900"
+                        />
+                      </div>
+                      <%= if timestamp != "" do %>
+                        <!-- ml-7 roughly matches the width of the arrow icon + spacing,
+                             so the timestamp text aligns with the start of the input -->
+                        <div class="mt-1 ml-7">
+                          <a href="#" class="text-sm text-gray-500 hover:text-indigo-800">
+                            <span class="text-gray-500">Found in transcript </span>
+                            <span class="text-indigo-600">(<%= timestamp %>)</span>
+                          </a>
+                        </div>
+                      <% end %>
+                    </div>
+                  </div>
+                </div>
+              <% end %>
+            </div>
+          </div>
+        <% end %>
+      </div>
+    <% else %>
+      <%= if @selected_contact && Enum.empty?(@suggested_updates) do %>
+        <%= if @loading do %>
+          <!-- While AI suggestions are loading, show a spinner in the updates area -->
+          <div class="mt-6 flex items-center justify-center py-8 text-gray-600 text-sm">
+            <div class="flex items-center space-x-2">
+              <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-600"></div>
+              <span>Generating suggested updates from this meeting...</span>
+            </div>
+          </div>
+        <% else %>
+          <!-- Only show 'Nothing to update' once loading is finished and no diffs were found -->
+          <div class="mt-4 p-4 border border-gray-200 rounded-md bg-gray-50 text-sm text-gray-600">
+            Nothing to update. No changes were detected between this meeting transcript and the current HubSpot contact fields.
+          </div>
+        <% end %>
+      <% end %>
+    <% end %>
+
+    <!-- Footer -->
+    <%= if @selected_contact && not Enum.empty?(@suggested_updates) do %>
+      <div class="mt-6 pt-4 border-t border-gray-200 flex items-center justify-between">
+        <div class="text-sm text-gray-600">
+          <% total_selected = get_total_selected_count(@selected_updates, @suggested_updates) %>
+          <%= total_selected %> field<%= if total_selected != 1, do: "s", else: "" %> in 1 integration selected to update
+        </div>
+        <div class="flex items-center space-x-3">
+          <button
+            type="button"
+            phx-click={JS.patch(@patch)}
+            class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            phx-click="update_hubspot"
+            phx-target={@myself}
+            disabled={@updating}
+            class="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 flex items-center space-x-2"
+          >
+            <%= if @updating do %>
+              <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+            <% else %>
+              <span>Update HubSpot</span>
+            <% end %>
+          </button>
+        </div>
+      </div>
+    <% end %>
+</div>
+
